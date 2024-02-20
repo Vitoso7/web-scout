@@ -1,26 +1,95 @@
-import { Injectable } from '@nestjs/common';
-import { type LaunchOptions } from 'playwright';
-import { chromium } from 'playwright-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import {
+    InfiniteScrollOptions,
+    PlaywrightCrawler,
+    PlaywrightCrawlerOptions,
+    PlaywrightLaunchContext,
+} from 'crawlee';
+import { WebScoutRequest } from './types';
 
-// TODO .env
-const launchOptions: LaunchOptions = {
+// TODO implement .env
+
+// TODO use on page.evaluate
+// type PageEvaluationResponse = {
+//     completeLinks: Array<string>;
+//     relativeLinks: Array<string>;
+//     anchorLinks: Array<string>;
+//     isPageRedirected: boolean;
+//     evaluatedTitle?: string;
+//     evaluatedUrl: string;
+//     startAt: Date;
+//     finishAt: Date;
+// };
+
+// TODO use on page.evaluate
+// type PageEvaluationArgs = {
+//     url: string;
+//     domain: string;
+// };
+
+const playwrightLaunchContext: PlaywrightLaunchContext = {
+    useChrome: false,
+};
+
+const playwrightCrawlerOptions: PlaywrightCrawlerOptions = {
     headless: false,
-} as const;
+    retryOnBlocked: true,
+    launchContext: playwrightLaunchContext,
+    keepAlive: true,
+};
+
+// TODO Create proper configuration
+const infiniteScrollOptions: InfiniteScrollOptions = {
+    scrollDownAndUp: true,
+    maxScrollHeight: 0,
+    waitForSecs: 2,
+    stopScrollCallback() {
+        console.log('scroll called');
+    },
+};
 
 @Injectable()
-export class HeadlessBrowserService {
-    constructor() {}
+export class HeadlessBrowserService implements OnModuleInit {
+    private crawler: PlaywrightCrawler;
 
-    scoutWebPage(): any {
-        chromium.use(StealthPlugin());
+    // private currentRequest: any;
 
-        const url = 'https://www.crunchyroll.com/pt-br/series/G4PH0WXVJ';
+    async onModuleInit() {
+        console.log('HeadlessBrowserService init');
 
-        chromium.launch(launchOptions).then(async (browser) => {
-            const page = await browser.newPage();
+        this.crawler = new PlaywrightCrawler({
+            ...playwrightCrawlerOptions,
+            async requestHandler({ page, log, infiniteScroll }) {
+                log.info('requestHandler()');
 
-            await page.goto(url);
+                // await closeCookieModals();
+                await infiniteScroll(infiniteScrollOptions);
+
+                const content = await page.evaluate(() => {
+                    console.log('hello from evaluation');
+
+                    return 'nothing';
+                });
+
+                console.log(`url from evaluate: ${content}`);
+            },
         });
+
+        this.crawler.run();
+    }
+
+    async scoutPage(webScoutRequest: WebScoutRequest): Promise<any> {
+        // TODO Check for running state and implement a fallback in case the value is false
+        console.log('is headless browser running?', this.crawler.running);
+
+        // TODO Add all webScoutMessage.urls to the queue
+
+        await this.crawler.addRequests([
+            {
+                url: webScoutRequest.originalUrl,
+                maxRetries: 0,
+                keepUrlFragment: false,
+            },
+        ]);
     }
 }
