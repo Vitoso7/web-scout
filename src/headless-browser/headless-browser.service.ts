@@ -1,140 +1,95 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import {
-    type LaunchOptions,
-    type BrowserContextOptions,
-    type Page,
-} from 'playwright';
-import { chromium } from 'playwright-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { WebScoutMessage } from './types';
+    InfiniteScrollOptions,
+    PlaywrightCrawler,
+    PlaywrightCrawlerOptions,
+    PlaywrightLaunchContext,
+} from 'crawlee';
+import { WebScoutRequest } from './types';
 
-// TODO .env
-const launchOptions: LaunchOptions = {
-    headless: false,
-} as const;
+// TODO implement .env
 
-const browserContextOptions: BrowserContextOptions = {
-    locale: '',
-    acceptDownloads: false,
-} as const;
+// TODO use on page.evaluate
+// type PageEvaluationResponse = {
+//     completeLinks: Array<string>;
+//     relativeLinks: Array<string>;
+//     anchorLinks: Array<string>;
+//     isPageRedirected: boolean;
+//     evaluatedTitle?: string;
+//     evaluatedUrl: string;
+//     startAt: Date;
+//     finishAt: Date;
+// };
 
-type PageEvaluationResponse = {
-    completeLinks: Array<string>;
-    relativeLinks: Array<string>;
-    anchorLinks: Array<string>;
-    isPageRedirected: boolean;
-    evaluatedTitle?: string;
-    evaluatedUrl: string;
-    startAt: Date;
-    finishAt: Date;
+// TODO use on page.evaluate
+// type PageEvaluationArgs = {
+//     url: string;
+//     domain: string;
+// };
+
+const playwrightLaunchContext: PlaywrightLaunchContext = {
+    useChrome: false,
 };
 
-type PageEvaluationArgs = {
-    url: string;
-    domain: string;
+const playwrightCrawlerOptions: PlaywrightCrawlerOptions = {
+    headless: false,
+    retryOnBlocked: true,
+    launchContext: playwrightLaunchContext,
+    keepAlive: true,
+};
+
+// TODO Create proper configuration
+const infiniteScrollOptions: InfiniteScrollOptions = {
+    scrollDownAndUp: true,
+    maxScrollHeight: 0,
+    waitForSecs: 2,
+    stopScrollCallback() {
+        console.log('scroll called');
+    },
 };
 
 @Injectable()
-export class HeadlessBrowserService {
-    constructor() {}
+export class HeadlessBrowserService implements OnModuleInit {
+    private crawler: PlaywrightCrawler;
 
-    // TODO maybe use Crawlee in favor of simply using playwright since it provides more reliable browser fingerprints to avoid being blocked
-    async scoutPage(webScoutMessage: WebScoutMessage): Promise<any> {
-        chromium.use(StealthPlugin());
+    // private currentRequest: any;
 
-        // TODO Remove this
-        console.log(webScoutMessage);
+    async onModuleInit() {
+        console.log('HeadlessBrowserService init');
 
-        // TODO Remove this and use webScoutMessage
-        const url = 'https://www.crunchyroll.com/pt-br/series/G4PH0WXVJ';
-        const domain = 'https://www.crunchyroll.com';
+        this.crawler = new PlaywrightCrawler({
+            ...playwrightCrawlerOptions,
+            async requestHandler({ page, log, infiniteScroll }) {
+                log.info('requestHandler()');
 
-        const browserInstance = await chromium.launch(launchOptions);
+                // await closeCookieModals();
+                await infiniteScroll(infiniteScrollOptions);
 
-        const browserContext = await browserInstance.newContext(
-            browserContextOptions,
-        );
+                const content = await page.evaluate(() => {
+                    console.log('hello from evaluation');
 
-        const page = await browserContext.newPage();
-
-        // TODO Add logic to evaluate relative URLs
-        const content = await this.#scoutPageEvaluation(page, url, domain);
-    }
-
-    async #scoutPageEvaluation(
-        page: Page,
-        url: string,
-        domain: string,
-    ): Promise<any> {
-        await page.goto(url, { waitUntil: 'load' });
-
-        // TODO Remove this
-        console.log(`domain is ${domain}`);
-        console.log(`url is ${url}`);
-        console.log(`page.url() is ${page.url()}`);
-
-        const evaluatedContent = await page.evaluate(
-            (args: PageEvaluationArgs): PageEvaluationResponse => {
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => false,
+                    return 'nothing';
                 });
 
-                const evaluatedUrl = document.URL;
-
-                // FIXME this logic is incorrect, also don't do this here inside the browser
-                const isPageRedirected = evaluatedUrl !== args.url;
-
-                console.log(`evaluated url: ${evaluatedUrl}`);
-
-                const anchorTags = document.getElementsByTagName('a');
-
-                // Sets to remove repeted links
-                const completeLinks = new Set<string>();
-                const relativeLinks = new Set<string>();
-                const anchorLinks = new Set<string>();
-
-                // TODO Filter email URIs and not web related stuff (Maybe not)
-                // Ex.: mailto:pr@crunchyroll.com on hrefs
-                for (let i = 0; i < anchorTags.length; i++) {
-                    const hrefValue = anchorTags[i].getAttribute('href');
-
-                    if (hrefValue === '' || hrefValue === '#') {
-                        continue;
-                    }
-
-                    if (hrefValue.startsWith('/')) {
-                        relativeLinks.add(`${args.domain}${hrefValue}`);
-                        continue;
-                    }
-
-                    // FIXME this .includes is not working because the evaluatedUrl is wrong
-                    if (
-                        hrefValue.startsWith('#') ||
-                        hrefValue.includes(`${evaluatedUrl}#`)
-                    ) {
-                        console.log(`HERE: ${evaluatedUrl}#`);
-                        anchorLinks.add(hrefValue);
-                        continue;
-                    }
-
-                    completeLinks.add(hrefValue);
-                }
-
-                // TODO Remove transformations (Sets -> Array) Sets might not be needed & put correct dates
-                return {
-                    anchorLinks: Array.from(anchorLinks),
-                    completeLinks: Array.from(completeLinks),
-                    finishAt: new Date(),
-                    isPageRedirected,
-                    relativeLinks: Array.from(relativeLinks),
-                    startAt: new Date(),
-                    evaluatedTitle: document.title,
-                    evaluatedUrl,
-                };
+                console.log(`url from evaluate: ${content}`);
             },
-            { url, domain },
-        );
+        });
 
-        console.log(evaluatedContent);
+        this.crawler.run();
+    }
+
+    async scoutPage(webScoutRequest: WebScoutRequest): Promise<any> {
+        // TODO Check for running state and implement a fallback in case the value is false
+        console.log('is headless browser running?', this.crawler.running);
+
+        // TODO Add all webScoutMessage.urls to the queue
+
+        await this.crawler.addRequests([
+            {
+                url: webScoutRequest.originalUrl,
+                maxRetries: 0,
+                keepUrlFragment: false,
+            },
+        ]);
     }
 }

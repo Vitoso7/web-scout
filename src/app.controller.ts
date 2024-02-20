@@ -1,7 +1,7 @@
 import { Controller, Post, Body } from '@nestjs/common';
 // import { AppService } from './app.service';
 import { HeadlessBrowserService } from './headless-browser/headless-browser.service';
-import { WebScoutMessage } from './headless-browser/types';
+import { WebScoutRequest } from './headless-browser/types';
 
 @Controller()
 export class AppController {
@@ -11,7 +11,7 @@ export class AppController {
     ) {}
 
     @Post()
-    getHello(@Body() webScoutMessage: WebScoutMessage): any {
-        return this.headlessBrowserService.scoutPage(webScoutMessage);
+    getHello(@Body() webScoutRequest: WebScoutRequest): any {
+        return this.headlessBrowserService.scoutPage(webScoutRequest);
     }
 }

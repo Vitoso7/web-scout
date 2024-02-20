@@ -1,4 +1,4 @@
-export type WebScoutMessage = {
+export type WebScoutRequest = {
     title: string;
     domain: string;
     originalUrl: string;
