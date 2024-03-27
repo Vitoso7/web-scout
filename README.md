@@ -14,6 +14,8 @@ $ yarn install
 
 ## Running the app
 
+use a node version >= 20
+
 ```bash
 # development
 $ yarn run start
